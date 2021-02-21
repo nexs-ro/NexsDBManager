@@ -24,6 +24,7 @@ package ro.nexs.db.manager.manager;
 import com.mysql.jdbc.Blob;
 import ro.nexs.db.manager.connection.DBConnection;
 import ro.nexs.db.manager.exception.DatabaseCreationException;
+import ro.nexs.db.manager.exception.DifferentArgLengthException;
 import ro.nexs.db.manager.exception.NoDataFoundException;
 import ro.nexs.db.manager.listener.QueryListener;
 import ro.nexs.db.manager.response.Query;
@@ -32,8 +33,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class DBManager {
 
@@ -238,20 +242,95 @@ public class DBManager {
      *
      * @param tableName The given tablename.
      * @param field     The given field.
-     * @param type      The given type.
+     * @param obj       The given type.
      * @param <T>       Typedef.
      * @return {@link Boolean}
      */
-    public <T> boolean exists(String tableName, String field, T type) {
+    public <T> boolean exists(String tableName, String field, T obj) {
         PreparedStatement preparedStatement = this.getPreparedStatement("SELECT * FROM `" + tableName + "` WHERE " + field + " = ?");
         try {
-            preparedStatement.setObject(1, type);
+            preparedStatement.setObject(1, obj);
             ResultSet resultSet = this.executeQuery(preparedStatement);
             return resultSet.next();
         } catch (SQLException throwable) {
             throwable.printStackTrace();
             return false;
         }
+    }
+
+    /**
+     * Returns whether or not a specified {@link String}
+     * exists in our table.
+     * Requires the table name, the field which we will
+     * access and the typedef of the object we're
+     * searching for.
+     *
+     * @param tableName The given table name.
+     * @param field     The given field.
+     * @return {@link Boolean}
+     */
+    public boolean existString(String tableName, String field, String lookup) {
+        return exists(tableName, field, lookup);
+    }
+
+    /**
+     * Returns whether or not a specified {@link Integer}
+     * exists in our table.
+     * Requires the table name, the field which we will
+     * access and the typedef of the object we're
+     * searching for.
+     *
+     * @param tableName The given table name.
+     * @param field     The given field.
+     * @return {@link Boolean}
+     */
+    public boolean existsInt(String tableName, String field, int lookup) {
+        return exists(tableName, field, lookup);
+    }
+
+    /**
+     * Returns whether or not a specified {@link UUID}
+     * exists in our table.
+     * Requires the table name, the field which we will
+     * access and the typedef of the object we're
+     * searching for.
+     *
+     * @param tableName The given table name.
+     * @param field     The given field.
+     * @return {@link Boolean}
+     */
+    public boolean existsUniqueIdentifier(String tableName, String field, UUID lookup) {
+        return exists(tableName, field, lookup);
+    }
+
+    /**
+     * Returns whether or not a specified {@link String}
+     * exists in our table.
+     * Requires the table name, the field which we will
+     * access and the typedef of the object we're
+     * searching for.
+     *
+     * @param tableName The given table name.
+     * @param field     The given field.
+     * @return {@link Boolean}
+     */
+    public boolean existsLong(String tableName, String field, long lookup) {
+        return exists(tableName, field, lookup);
+    }
+
+    /**
+     * Returns whether or not a specified {@link Blob}
+     * exists in our table.
+     * Requires the table name, the field which we will
+     * access and the typedef of the object we're
+     * searching for.
+     *
+     * @param tableName The given table name.
+     * @param field     The given field.
+     * @return {@link Boolean}
+     */
+    public boolean existsBlob(String tableName, String field, Blob lookup) {
+        return exists(tableName, field, lookup);
     }
 
     /**
@@ -311,7 +390,7 @@ public class DBManager {
      * @param key       The key
      * @param <T>       The typedef.
      */
-    public <T> void set(String tableName, String setField, String keyField, Object set, Object key) {
+    public <T> void set(String tableName, String setField, String keyField, Object set, T key) {
         String query = "UPDATE " + tableName + " SET " + setField + " = ? WHERE " + keyField + " = ?";
         PreparedStatement preparedStatement = this.getPreparedStatement(query);
         try {
@@ -321,6 +400,81 @@ public class DBManager {
         } catch (SQLException throwable) {
             throwable.printStackTrace();
         }
+    }
+
+    /**
+     * Method used for inserting an array of
+     * {@link T} typedefs into a table by specifying
+     * the fields as a {@link String[]}.
+     *
+     * @param tableName The name of the table which shall
+     *                  be used for executing the query.
+     * @param fields    The array of fields.
+     * @param args      The arguments/objects that we should set.
+     * @param <T>       The typedef of the insertion method.
+     * @throws DifferentArgLengthException in case the length of the
+     *                                     fields parameter differs from the one of the args parameter.
+     */
+    public <T> void insert(String tableName, String[] fields, T[] args) throws DifferentArgLengthException {
+        if (fields.length != args.length) {
+            throw new DifferentArgLengthException("Arguments in string array `fields` have to match arguments in T array `args`!");
+        }
+        AtomicReference<String> query = new AtomicReference<>("INSERT INTO `" + tableName + "` (");
+        Arrays.stream(fields).forEach(field -> {
+            query.set(query.get() + field + ", ");
+        });
+        query.set(this.fixLastIndex(query.get()));
+        query.set(query.get() + " VALUE (");
+        for (int i = 0; i < args.length; i++) {
+            query.set(query.get() + "?, ");
+        }
+        query.set(this.fixLastIndex(query.get()));
+        PreparedStatement preparedStatement = this.getPreparedStatement(query.get());
+        for (int i = 1; i <= args.length; i++) {
+            try {
+                preparedStatement.setObject(i, args[i - 1]);
+            } catch (SQLException throwable) {
+                throwable.printStackTrace();
+            }
+        }
+        this.execute(preparedStatement);
+    }
+
+    /**
+     * Method used for creating a new table inside
+     * of our database.
+     *
+     * @param tableName The name of the table.
+     * @param args      The arguments, also known as the fields
+     *                  which the table will have along with their SQL
+     *                  types. An example could bew {"UUID varchar(256)", "LEVEL int(255)"}
+     *                  as a {@link String[]} args.
+     */
+    public void createTable(String tableName, String[] args) {
+        StringBuilder query = new StringBuilder("CREATE TABLE IF NOT EXISTS `" + tableName + "` (");
+        for (String arg : args) {
+            query.append(arg).append(", ");
+        }
+        query = new StringBuilder(query.substring(0, query.length() - 2) + ")");
+        PreparedStatement preparedStatement = this.getPreparedStatement(query.toString());
+        try {
+            preparedStatement.executeUpdate();
+        } catch (SQLException throwable) {
+            throwable.printStackTrace();
+        }
+    }
+
+    /**
+     * Utility method used for fixing the insertion statement.
+     * This method shouldn't pe publicly available.
+     *
+     * @param string The {@link String} which we're fixing.
+     * @return {@link String}
+     */
+    private String fixLastIndex(String string) {
+        String ret = "";
+        ret = string.substring(0, string.length() - 2) + ")";
+        return ret;
     }
 
     /**

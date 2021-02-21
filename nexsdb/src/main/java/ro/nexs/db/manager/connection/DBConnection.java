@@ -119,8 +119,8 @@ public class DBConnection {
         try {
             Class.forName("com.mysql.jdbc.Driver");
         } catch (ClassNotFoundException e) {
-            e.printStackTrace();
             Util.log(SEVERE_LOGGER, "The class `com.mysql.jdbc.Driver` was not found on your device! Please install this dependency before attempting to utilize the DBManager library.");
+            e.printStackTrace();
         }
         try {
             synchronized (this) {
