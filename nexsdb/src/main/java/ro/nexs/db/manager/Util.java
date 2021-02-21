@@ -84,6 +84,4 @@ public class Util {
     public static void log(Logger logger, String message) {
         logger.log(logger.getLevel(), message);
     }
-
-    public static DBConnection dbConnection = new DBConnection("localhost", 3306, "prophecymining", "root", "");
 }
